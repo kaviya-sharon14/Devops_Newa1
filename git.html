@@ -1,0 +1,79 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>To-Do App</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; }
+        h1 { color: #2c3e50; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 8px; background: #f4f4f4; margin: 5px 0; border-radius: 5px; }
+        button { margin-left: 10px; }
+        input { padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>{{ result }}</h1>
+    <p>Welcome to the Python Flask To-Do App 🚀</p>
+
+    <h2>Your To-Do List</h2>
+    <ul id="todo-list"></ul>
+
+    <h3>Add New Task</h3>
+    <input type="text" id="new-task" placeholder="Enter task title">
+    <button onclick="addTodo()">Add</button>
+
+    <script>
+        const apiUrl = "http://localhost:5000/todos";
+
+        // Fetch and display todos
+        async function loadTodos() {
+            const res = await fetch(apiUrl);
+            const todos = await res.json();
+            const list = document.getElementById("todo-list");
+            list.innerHTML = "";
+            todos.forEach(t => {
+                const li = document.createElement("li");
+                li.innerHTML = `
+                    ${t.title} ${t.done ? "✅" : "❌"}
+                    <button onclick="toggleDone(${t.id}, ${t.done})">Toggle</button>
+                    <button onclick="deleteTodo(${t.id})">Delete</button>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        // Add a new todo
+        async function addTodo() {
+            const title = document.getElementById("new-task").value;
+            if (!title) return alert("Please enter a task");
+            await fetch(apiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title })
+            });
+            document.getElementById("new-task").value = "";
+            loadTodos();
+        }
+
+        // Toggle done status
+        async function toggleDone(id, done) {
+            await fetch(`${apiUrl}/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ done: !done })
+            });
+            loadTodos();
+        }
+
+        // Delete a todo
+        async function deleteTodo(id) {
+            await fetch(`${apiUrl}/${id}`, { method: "DELETE" });
+            loadTodos();
+        }
+
+        // Load todos on page load
+        loadTodos();
+    </script>
+</body>
+</html>

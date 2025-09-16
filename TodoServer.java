@@ -4,10 +4,12 @@ import com.sun.net.httpserver.HttpHandler;
 
 import java.io.*;
 import java.net.InetSocketAddress;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class TodoServer {
+
     static class Todo {
         int id;
         String title;
@@ -29,13 +31,35 @@ public class TodoServer {
 
     public static void main(String[] args) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(5000), 0);
-        server.createContext("/todos", new TodosHandler());
-        server.createContext("/todos/", new TodoIdHandler()); // For /todos/<id>
-        System.out.println("Server started at http://localhost:5000/");
+        server.createContext("/", new HomeHandler());              // serve index.html
+        server.createContext("/todos", new TodosHandler());        // handle /todos
+        server.createContext("/todos/", new TodoIdHandler());      // handle /todos/<id>
+        System.out.println("✅ Server running at http://localhost:5000");
         server.start();
     }
 
-    // Handle /todos and POST /todos
+    static class HomeHandler implements HttpHandler {
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+            File htmlFile = new File("index.html");
+            if (!htmlFile.exists()) {
+                String notFound = "<h1>404 - index.html not found</h1>";
+                exchange.sendResponseHeaders(404, notFound.length());
+                exchange.getResponseBody().write(notFound.getBytes());
+                exchange.close();
+                return;
+            }
+            String html = new String(Files.readAllBytes(htmlFile.toPath()));
+            exchange.getResponseHeaders().set("Content-Type", "text/html");
+            exchange.sendResponseHeaders(200, html.getBytes().length);
+            exchange.getResponseBody().write(html.getBytes());
+            exchange.close();
+        }
+    }
+
     static class TodosHandler implements HttpHandler {
         public void handle(HttpExchange exchange) throws IOException {
             String method = exchange.getRequestMethod();
@@ -48,12 +72,10 @@ public class TodoServer {
             } else if (method.equalsIgnoreCase("POST")) {
                 String body = readRequestBody(exchange);
                 String title = parseJsonField(body, "title");
-
                 if (title == null) {
                     writeResponse(exchange, "{\"error\": \"Missing title\"}", 400);
                     return;
                 }
-
                 Todo todo = new Todo(nextId++, title);
                 todos.add(todo);
                 writeResponse(exchange, todo.toJson(), 201);
@@ -63,7 +85,6 @@ public class TodoServer {
         }
     }
 
-    // Handle /todos/<id> GET, PUT, DELETE
     static class TodoIdHandler implements HttpHandler {
         public void handle(HttpExchange exchange) throws IOException {
             String method = exchange.getRequestMethod();
@@ -90,23 +111,18 @@ public class TodoServer {
                 } else {
                     writeResponse(exchange, "{\"error\": \"Not found\"}", 404);
                 }
-
             } else if (method.equalsIgnoreCase("PUT")) {
                 if (!todoOpt.isPresent()) {
                     writeResponse(exchange, "{\"error\": \"Not found\"}", 404);
                     return;
                 }
-
                 String body = readRequestBody(exchange);
                 String title = parseJsonField(body, "title");
                 String doneStr = parseJsonField(body, "done");
-
                 Todo todo = todoOpt.get();
                 if (title != null) todo.title = title;
                 if (doneStr != null) todo.done = Boolean.parseBoolean(doneStr);
-
                 writeResponse(exchange, todo.toJson(), 200);
-
             } else if (method.equalsIgnoreCase("DELETE")) {
                 if (todoOpt.isPresent()) {
                     todos.remove(todoOpt.get());
@@ -119,8 +135,6 @@ public class TodoServer {
             }
         }
     }
-
-    // Helpers
 
     private static String readRequestBody(HttpExchange exchange) throws IOException {
         InputStream in = exchange.getRequestBody();
@@ -138,13 +152,11 @@ public class TodoServer {
         os.close();
     }
 
-    // Very basic JSON parser (for simple { "title": "something", "done": true })
     private static String parseJsonField(String json, String key) {
         String regex = "\"" + key + "\"\\s*:\\s*(\"[^\"]*\"|true|false)";
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(regex).matcher(json);
         if (matcher.find()) {
-            String value = matcher.group(1);
-            return value.replace("\"", "");
+            return matcher.group(1).replace("\"", "");
         }
         return null;
     }
